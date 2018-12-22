@@ -136,13 +136,7 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        startBackgroundThread()
-        if (cameraTextureView.isAvailable) {
-            checkCameraRotationStateAndSetUpCameraId(cameraTextureView.width, cameraTextureView.height)
-            connectCamera(cameraTextureView.width, cameraTextureView.height)
-        } else {
-            cameraTextureView.surfaceTextureListener = surfaceTextureListener
-        }
+        startCamera()
     }
 
     override fun onPause() {
@@ -180,6 +174,10 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     private fun restartCamera() {
         disconnectCamera()
+        startCamera()
+    }
+
+    private fun startCamera() {
         startBackgroundThread()
         if (cameraTextureView.isAvailable) {
             checkCameraRotationStateAndSetUpCameraId(cameraTextureView.width, cameraTextureView.height)
