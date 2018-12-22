@@ -1,7 +1,6 @@
 package com.example.anvar.camerademo.myCamera
 
 import android.annotation.SuppressLint
-
 import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.Matrix
@@ -66,7 +65,7 @@ class PhotoCameraActivity : AppCompatActivity() {
     private lateinit var cameraTextureView: AutoFitTextureView
 
     private val onImageAvailableListener = ImageReader.OnImageAvailableListener { reader ->
-        backgroundHandler!!.post(ImageSaver(reader.acquireLatestImage()))
+        backgroundHandler!!.post(ImageSaver(reader.acquireLatestImage(), imageFileName!!))
     }
 
     private val previewCaptureCallback: CameraCaptureSession.CaptureCallback =
@@ -217,7 +216,7 @@ class PhotoCameraActivity : AppCompatActivity() {
             if (cameraType == CameraType.BACK) {
                 isFlashSupported = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
             }
-            setPreviewSizes(characteristics, width, height)
+            setPreviewSizes(characteristics, width, height, cameraType)
             imageReader = ImageReader.newInstance(imageSize!!.width, imageSize!!.height, ImageFormat.JPEG, 1)
             imageReader!!.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler)
             this.cameraId = cameraId
@@ -226,12 +225,18 @@ class PhotoCameraActivity : AppCompatActivity() {
         throw IllegalStateException("Could not set Camera Id")
     }
 
-    private fun setPreviewSizes(characteristics: CameraCharacteristics, width: Int, height: Int) {
+    private fun setPreviewSizes(
+        characteristics: CameraCharacteristics,
+        width: Int,
+        height: Int,
+        cameraType: CameraType
+    ) {
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val deviceOrientation = windowManager.defaultDisplay.rotation
         totalRotation = sensorToDeviceRotation(
             characteristics,
-            deviceOrientation
+            deviceOrientation,
+            cameraType
         )
         val swapRotation = totalRotation == 90 || totalRotation == 270
         var rotationWidth = width
@@ -241,7 +246,7 @@ class PhotoCameraActivity : AppCompatActivity() {
             rotationHeight = width
         }
         previewSize = chooseOptimalSize(
-            map.getOutputSizes(
+            map!!.getOutputSizes(
                 SurfaceTexture::class.java
             ), rotationWidth, rotationHeight
         )
@@ -253,7 +258,7 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun connectCamera(width: Int, height: Int) {
-        transformImage(width, height)
+        transformImage(width, height, previewSize!!, cameraTextureView)
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             cameraManager.openCamera(cameraId!!, cameraDeviceStateCallback, backgroundHandler)
@@ -299,7 +304,7 @@ class PhotoCameraActivity : AppCompatActivity() {
         try {
             captureRequestBuilder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             captureRequestBuilder!!.addTarget(previewSurface)
-            setAutoFlash()
+            setAutoFlash(cameraRotationState)
             cameraDevice!!.createCaptureSession(
                 Arrays.asList(previewSurface, imageReader!!.surface),
                 captureStateCallback
@@ -310,16 +315,16 @@ class PhotoCameraActivity : AppCompatActivity() {
         }
     }
 
-    private fun setAutoFlash() {
+    private fun setAutoFlash(cameraType: CameraType) {
         try {
-            if (cameraRotationState == CameraType.BACK) {
+            if (cameraType == CameraType.BACK) {
                 if (isFlashSupported!!) {
                     if (isTorchOn) {
                         captureRequestBuilder!!.set(
                             CaptureRequest.CONTROL_AE_MODE,
                             CaptureRequest.CONTROL_AE_MODE_ON_ALWAYS_FLASH
                         )
-                    } else if(!firstStart) {
+                    } else if (!firstStart) {
                         captureRequestBuilder!!.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
                         captureRequestBuilder!!.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
                     }
@@ -387,6 +392,7 @@ class PhotoCameraActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SimpleDateFormat")
     private fun createImageFileName(): File {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val prepend = "IMAGE_${timestamp}_"
@@ -395,11 +401,10 @@ class PhotoCameraActivity : AppCompatActivity() {
         return imageFile
     }
 
-    private fun transformImage(width: Int, height: Int) {
-        if (previewSize != null) {
+    private fun transformImage(width: Int, height: Int, previewSize: Size, cameraTextureView: TextureView) {
             val matrix = Matrix()
-            val previewSizeWidth = previewSize!!.width
-            val previewSizeHeight = previewSize!!.height
+        val previewSizeWidth = previewSize.width
+        val previewSizeHeight = previewSize.height
             val rotation = windowManager.defaultDisplay.rotation
             val textureRectF = RectF(0f, 0f, width.toFloat(), height.toFloat())
             val previewRectF = RectF(0f, 0f, previewSizeHeight.toFloat(), previewSizeWidth.toFloat())
@@ -418,14 +423,17 @@ class PhotoCameraActivity : AppCompatActivity() {
                 matrix.postRotate(180f, centerX, centerY)
             }
             cameraTextureView.setTransform(matrix)
-        }
     }
 
-    private fun sensorToDeviceRotation(cameraCharacteristics: CameraCharacteristics, deviceOrientation: Int): Int {
+    private fun sensorToDeviceRotation(
+        cameraCharacteristics: CameraCharacteristics,
+        deviceOrientation: Int,
+        cameraType: CameraType
+    ): Int {
         val sensorDeviceOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)
-        setOrientations()
-        val newDeviceOrientation = ORIENTATIONS.get(deviceOrientation)
-        return (sensorDeviceOrientation + newDeviceOrientation) % 360
+        val orientations = setOrientations(cameraType)
+        val newDeviceOrientation = orientations.get(deviceOrientation)
+        return (sensorDeviceOrientation!! + newDeviceOrientation) % 360
     }
 
     private fun chooseOptimalSize(choices: Array<Size>, width: Int, height: Int): Size {
@@ -442,27 +450,27 @@ class PhotoCameraActivity : AppCompatActivity() {
         }
     }
 
-    private fun setOrientations() {
-        if (cameraRotationState == CameraType.BACK) {
-            ORIENTATIONS.append(Surface.ROTATION_0, 90)
-            ORIENTATIONS.append(Surface.ROTATION_90, 180)
-            ORIENTATIONS.append(Surface.ROTATION_180, 270)
-            ORIENTATIONS.append(Surface.ROTATION_270, 0)
+    private fun setOrientations(cameraType: CameraType): SparseIntArray {
+        val orientations = SparseIntArray()
+        when (cameraType) {
+            CameraType.BACK -> {
+                orientations.append(Surface.ROTATION_0, 90)
+                orientations.append(Surface.ROTATION_90, 180)
+                orientations.append(Surface.ROTATION_180, 270)
+                orientations.append(Surface.ROTATION_270, 0)
+            }
+            CameraType.FRONT -> {
+                orientations.append(Surface.ROTATION_0, 90)
+                orientations.append(Surface.ROTATION_90, 0)
+                orientations.append(Surface.ROTATION_180, 270)
+                orientations.append(Surface.ROTATION_270, 180)
+            }
         }
-        if (cameraRotationState == CameraType.FRONT) {
-            ORIENTATIONS.append(Surface.ROTATION_0, 90)
-            ORIENTATIONS.append(Surface.ROTATION_90, 0)
-            ORIENTATIONS.append(Surface.ROTATION_180, 270)
-            ORIENTATIONS.append(Surface.ROTATION_270, 180)
-        }
+        return orientations
     }
 
     companion object {
-
-        private val ORIENTATIONS = SparseIntArray()
-
         const val INTENT_IMAGE_ARGUMENT_KEY = "photoImage"
-
     }
 
     private enum class CameraType {
@@ -472,11 +480,14 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     private object CompareSizeByArea : Comparator<Size> {
         override fun compare(o1: Size?, o2: Size?): Int {
-            return sign(o1!!.width.toDouble() * o1.height.toDouble() / o2!!.width.toDouble() * o2.height.toDouble()).toInt()
+            return sign((o1!!.width.toDouble() * o1.height.toDouble()) / (o2!!.width.toDouble() * o2.height.toDouble())).toInt()
         }
     }
 
-    private inner class ImageSaver(private val mImage: Image) : Runnable {
+    private inner class ImageSaver(
+        private val mImage: Image,
+        private val imageFileName: String
+    ) : Runnable {
         override fun run() {
             val byteBuffer = mImage.planes[0].buffer
             val bytes = ByteArray(byteBuffer.remaining())
