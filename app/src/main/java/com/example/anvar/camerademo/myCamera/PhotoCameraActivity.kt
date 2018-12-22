@@ -216,7 +216,7 @@ class PhotoCameraActivity : AppCompatActivity() {
             if (cameraType == CameraType.BACK) {
                 isFlashSupported = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
             }
-            setPreviewSizes(characteristics, width, height, cameraType)
+            setPreviewSizes(characteristics, width, height)
             imageReader = ImageReader.newInstance(imageSize!!.width, imageSize!!.height, ImageFormat.JPEG, 1)
             imageReader!!.setOnImageAvailableListener(onImageAvailableListener, backgroundHandler)
             this.cameraId = cameraId
@@ -225,18 +225,12 @@ class PhotoCameraActivity : AppCompatActivity() {
         throw IllegalStateException("Could not set Camera Id")
     }
 
-    private fun setPreviewSizes(
-        characteristics: CameraCharacteristics,
-        width: Int,
-        height: Int,
-        cameraType: CameraType
-    ) {
+    private fun setPreviewSizes(characteristics: CameraCharacteristics, width: Int, height: Int) {
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val deviceOrientation = windowManager.defaultDisplay.rotation
         totalRotation = sensorToDeviceRotation(
             characteristics,
-            deviceOrientation,
-            cameraType
+            deviceOrientation
         )
         val swapRotation = totalRotation == 90 || totalRotation == 270
         var rotationWidth = width
@@ -258,7 +252,7 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun connectCamera(width: Int, height: Int) {
-        transformImage(width, height, previewSize!!, cameraTextureView)
+        transformImage(width, height)
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         try {
             cameraManager.openCamera(cameraId!!, cameraDeviceStateCallback, backgroundHandler)
@@ -304,7 +298,7 @@ class PhotoCameraActivity : AppCompatActivity() {
         try {
             captureRequestBuilder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             captureRequestBuilder!!.addTarget(previewSurface)
-            setAutoFlash(cameraRotationState)
+            setAutoFlash()
             cameraDevice!!.createCaptureSession(
                 Arrays.asList(previewSurface, imageReader!!.surface),
                 captureStateCallback
@@ -315,9 +309,9 @@ class PhotoCameraActivity : AppCompatActivity() {
         }
     }
 
-    private fun setAutoFlash(cameraType: CameraType) {
+    private fun setAutoFlash() {
         try {
-            if (cameraType == CameraType.BACK) {
+            if (cameraRotationState == CameraType.BACK) {
                 if (isFlashSupported!!) {
                     if (isTorchOn) {
                         captureRequestBuilder!!.set(
@@ -401,10 +395,11 @@ class PhotoCameraActivity : AppCompatActivity() {
         return imageFile
     }
 
-    private fun transformImage(width: Int, height: Int, previewSize: Size, cameraTextureView: TextureView) {
+    private fun transformImage(width: Int, height: Int) {
+        if (previewSize != null) {
             val matrix = Matrix()
-        val previewSizeWidth = previewSize.width
-        val previewSizeHeight = previewSize.height
+            val previewSizeWidth = previewSize!!.width
+            val previewSizeHeight = previewSize!!.height
             val rotation = windowManager.defaultDisplay.rotation
             val textureRectF = RectF(0f, 0f, width.toFloat(), height.toFloat())
             val previewRectF = RectF(0f, 0f, previewSizeHeight.toFloat(), previewSizeWidth.toFloat())
@@ -423,15 +418,12 @@ class PhotoCameraActivity : AppCompatActivity() {
                 matrix.postRotate(180f, centerX, centerY)
             }
             cameraTextureView.setTransform(matrix)
+        }
     }
 
-    private fun sensorToDeviceRotation(
-        cameraCharacteristics: CameraCharacteristics,
-        deviceOrientation: Int,
-        cameraType: CameraType
-    ): Int {
+    private fun sensorToDeviceRotation(cameraCharacteristics: CameraCharacteristics, deviceOrientation: Int): Int {
         val sensorDeviceOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)
-        val orientations = setOrientations(cameraType)
+        val orientations = setOrientations(cameraRotationState)
         val newDeviceOrientation = orientations.get(deviceOrientation)
         return (sensorDeviceOrientation!! + newDeviceOrientation) % 360
     }
@@ -480,7 +472,7 @@ class PhotoCameraActivity : AppCompatActivity() {
 
     private object CompareSizeByArea : Comparator<Size> {
         override fun compare(o1: Size?, o2: Size?): Int {
-            return sign((o1!!.width.toDouble() * o1.height.toDouble()) / (o2!!.width.toDouble() * o2.height.toDouble())).toInt()
+            return sign(o1!!.width.toDouble() * o1.height.toDouble() / o2!!.width.toDouble() * o2.height.toDouble()).toInt()
         }
     }
 
@@ -509,3 +501,4 @@ class PhotoCameraActivity : AppCompatActivity() {
         }
     }
 }
+
