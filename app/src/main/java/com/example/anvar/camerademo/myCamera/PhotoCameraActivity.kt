@@ -14,6 +14,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.support.v7.app.AppCompatActivity
+import android.util.Log
 import android.util.Size
 import android.util.SparseIntArray
 import android.view.Surface
@@ -134,6 +135,7 @@ class PhotoCameraActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
+        Log.e("camera", "resumed")
         super.onResume()
         startCamera()
     }
