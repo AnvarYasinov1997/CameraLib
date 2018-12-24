@@ -19,7 +19,7 @@ class CheckPermissionActivity : AppCompatActivity() {
         if (!permissions.isEmpty()) {
             if (requestCode == REQUEST_PERMISSION_RESULT) {
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    val photoCameraActivityIntent = Intent(this, PhotoCameraActivity::class.java)
+                    val photoCameraActivityIntent = Intent(this, CameraLibActivity::class.java)
                     startActivity(photoCameraActivityIntent)
                 } else {
                     finish()

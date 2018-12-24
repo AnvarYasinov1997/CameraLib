@@ -32,7 +32,10 @@ interface GetCamera {
     fun sendAction(action: UiAction)
 }
 
-class GetCameraImpl(textureView: AutoFitTextureView) : GetCamera, CoroutineScope {
+class GetCameraImpl(
+    textureView: AutoFitTextureView,
+    private val flashSwitchCallBack: (action: FlashAction) -> Unit
+) : GetCamera, CoroutineScope {
 
     init {
         process(textureView)
@@ -189,12 +192,10 @@ class GetCameraImpl(textureView: AutoFitTextureView) : GetCamera, CoroutineScope
 
     private fun switchFlash(state: CameraState) {
         state.isTorchOn = if (state.isTorchOn) {
-//            state.flashSwitchButton.setImageResource(R.mipmap.ic_flash_off_white_24dp)
-            print("set image")
+            flashSwitchCallBack(FlashAction.OFF)
             false
         } else {
-//            state.flashSwitchButton.setImageResource(R.mipmap.ic_flash_auto_white_24dp)
-            print("set image")
+            flashSwitchCallBack(FlashAction.ON)
             true
         }
         restartCamera(state)
@@ -514,6 +515,10 @@ sealed class CameraAction {
 enum class CameraType {
     FRONT,
     BACK
+}
+
+enum class FlashAction {
+    ON, OFF
 }
 
 enum class UiAction {
